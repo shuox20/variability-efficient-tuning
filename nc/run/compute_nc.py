@@ -1,18 +1,3 @@
-# coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-""" Finetuning a 🤗 Transformers model for sequence classification on GLUE."""
 import argparse
 import json
 import logging
@@ -48,6 +33,7 @@ from transformers import (
 from transformers.utils import get_full_repo_name
 from transformers.utils.versions import require_version
 #from src.transformers import AutoModelForSequenceClassification
+from nc.utils.nc_function import *
 
 logger = logging.getLogger(__name__)
 
@@ -419,22 +405,17 @@ def main():
         )
 
     train_dataset = processed_datasets["train"]
+
+    #divide train dataset by their labels
     dataset_category = {}
-    for i in train_dataset:
-        if i['labels'] not in dataset_category:
-            dataset_category[i['labels']]=[i]
+    for sample in train_dataset:
+        if sample['labels'] not in dataset_category:
+            dataset_category[sample['labels']]=[sample]
         else:
-            dataset_category[i['labels']].append(i)
+            dataset_category[sample['labels']].append(sample)
     logger.info('dataset seperate into', dataset_category.keys())
     del train_dataset
     torch.cuda.empty_cache()
-    #eval_dataset = processed_datasets["validation_matched" if args.task_name == "mnli" else "validation"]
-
-        # Log a few random samples from the training set:
-    '''
-    for index in random.sample(range(len(train_dataset)), 3):
-        logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
-    '''
 
     # DataLoaders creation:
     if args.pad_to_max_length:
@@ -447,97 +428,12 @@ def main():
         # of 8s, which will enable the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
         data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=(8 if accelerator.use_fp16 else None))
 
-    '''
-    train_dataloader = DataLoader(
-        train_dataset, shuffle=True, collate_fn=data_collator, batch_size=args.per_device_train_batch_size
-    )
-    '''
     dataloader_category = {}
     for k,v in dataset_category.items():
         logger.info(f'category {k} has {len(v)} samples.')
         dataloader_category[k]=DataLoader(v, shuffle=True, collate_fn=data_collator, batch_size=args.per_device_train_batch_size)
     logger.info(f'dataloader seperate into {dataloader_category.keys()}')
     
-    
-    #eval_dataloader = DataLoader(eval_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size)
-
-    # Optimizer
-    # Split weights in two groups, one with weight decay and the other not.
-    '''
-    no_decay = ["bias", "LayerNorm.weight"]
-    optimizer_grouped_parameters = [
-        {
-            "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
-            "weight_decay": args.weight_decay,
-        },
-        {
-            "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
-            "weight_decay": 0.0,
-        },
-    ]
-    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
-
-    # Scheduler and math around the number of training steps.
-    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
-    if args.max_train_steps is None:
-        args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
-    else:
-        args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
-
-    lr_scheduler = get_scheduler(
-        name=args.lr_scheduler_type,
-        optimizer=optimizer,
-        num_warmup_steps=args.num_warmup_steps,
-        num_training_steps=args.max_train_steps,
-    )
-
-    # Prepare everything with our `accelerator`.
-    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
-        model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
-    )
-
-    # Figure out how many steps we should save the Accelerator states
-    if hasattr(args.checkpointing_steps, "isdigit"):
-        checkpointing_steps = args.checkpointing_steps
-        if args.checkpointing_steps.isdigit():
-            checkpointing_steps = int(args.checkpointing_steps)
-    else:
-        checkpointing_steps = None
-
-    # We need to initialize the trackers we use, and also store our configuration
-    if args.with_tracking:
-        experiment_config = vars(args)
-        # TensorBoard cannot log Enums, need the raw value
-        experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
-        accelerator.init_trackers("glue_no_trainer", experiment_config)
-
-    # Get the metric function
-    if args.task_name is not None:
-        metric = load_metric("glue", args.task_name)
-    else:
-        metric = load_metric("accuracy")
-
-    # Train!
-    total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
-    # only train classification head
-    for p in model.parameters():
-        p.requires_grad = False
-    for p in model.classifier.parameters():
-        p.requires_grad = True
-    '''
-
-    logger.info("***** Running training *****")
-    '''
-    logger.info(f"  Num examples = {len(train_dataset)}")
-    logger.info(f"  Num Epochs = {args.num_train_epochs}")
-    logger.info(f"  Instantaneous batch size per device = {args.per_device_train_batch_size}")
-    logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}")
-    logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
-    logger.info(f"  Total optimization steps = {args.max_train_steps}")
-    # Only show the progress bar once on each machine.
-    progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_local_main_process)
-    completed_steps = 0
-    '''
     # Potentially load in the weights and states from a previous save
     if args.resume_from_checkpoint:
         if args.resume_from_checkpoint is not None or args.resume_from_checkpoint != "":
@@ -565,9 +461,6 @@ def main():
             args.num_train_epochs -= resume_step // len(train_dataloader)
             resume_step = (args.num_train_epochs * len(train_dataloader)) - resume_step
         '''
-
-    best_metric = -1
-    best_epoch = -1
     model = accelerator.prepare(model)
     for k in dataloader_category:
         dataloader_category[k] = accelerator.prepare(dataloader_category[k])
@@ -577,8 +470,6 @@ def main():
     vector_category = {}
     for k,v in dataloader_category.items():
         if os.path.exists(f'{args.output_dir}/category={k}_{args.num_hidden_layers}_{args.chosen_token}.pt'):
-            #print(f'result from {k} is already logged')
-            #logger.info(f'result from {k} is already logged')
             print(f'resume result in {k} from {args.output_dir}/category={k}_{args.num_hidden_layers}_{args.chosen_token}.pt')
             logger.info(f'resume result in {k} from {args.output_dir}/category={k}_{args.num_hidden_layers}_{args.chosen_token}.pt')
             vector_category[k]=torch.load(f'{args.output_dir}/category={k}_{args.num_hidden_layers}_{args.chosen_token}.pt', map_location=None)
@@ -612,241 +503,21 @@ def main():
             torch.save(vector_category[k], f'{args.output_dir}/category={k}_{args.num_hidden_layers}_{args.chosen_token}.pt')
             logger.info(f'save vectors in category {k}')
 
-
-    def compute_nc(vectors):
-        m_all = torch.concat([torch.mean(vector, 0, keepdims=True).transpose(0,1) for vector in vectors.values()],1)
-        weights = torch.tensor([vector.shape[0] for vector in vectors.values()])
-        B = torch.cov(m_all, correction=0, fweights = weights)
-        W = torch.zeros(B.shape)
-        for v in vectors.values():
-            W = W + torch.cov(v.transpose(0,1), correction=0)*v.shape[0]
-        W = W/torch.sum(weights)
-
-        nc = 1/len(vectors)*torch.trace(torch.matmul(W, torch.linalg.pinv(B)))
-        return nc
-
-    def nc_new(vectors): 
-        m_all = torch.concat([torch.mean(vector, 0, keepdims=True).transpose(0,1) for vector in vectors.values()], 1)
-        B_2 = torch.cov(m_all, correction=0)
-        m_global = torch.mean(torch.concat([v for v in vectors.values()], 0), 0, keepdims=True).transpose(0,1)
-        B_1 = torch.mm(m_all - m_global, (m_all - m_global).transpose(0,1))/len(vectors)
-        weights = torch.tensor([vector.shape[0] for vector in vectors.values()])
-        W_2 = torch.zeros(B_2.shape)
-        W_1 = torch.zeros(B_2.shape)
-        for v in vectors.values():
-            W_2 = W_2 + torch.cov(v.transpose(0,1), correction=0)
-            W_1 = W_1 + torch.cov(v.transpose(0,1), correction=0)*v.shape[0]
-        W_2 = W_2/len(vectors)
-        W_1 = W_1/torch.sum(weights)
-        B_3 = torch.cov(m_all, correction=0, fweights = weights)
-
-        nc_balanced = 1/len(vectors)*torch.trace(torch.matmul(W_1, torch.linalg.pinv(B_1)))
-        nc_imbalanced = 1/len(vectors)*torch.trace(torch.matmul(W_2, torch.linalg.pinv(B_2)))
-        nc_3 = 1/len(vectors)*torch.trace(torch.matmul(W_1, torch.linalg.pinv(B_2)))
-        nc_4 = 1/len(vectors)*torch.trace(torch.matmul(W_1, torch.linalg.pinv(B_3)))
-        nc_5 = 1/len(vectors)*torch.trace(torch.matmul(W_2, torch.linalg.pinv(B_1)))
-        nc_6 = 1/len(vectors)*torch.trace(torch.matmul(W_2, torch.linalg.pinv(B_3)))
-        #old_nc == nc_4
-        return([nc_balanced,nc_imbalanced, nc_3, nc_4, nc_5, nc_6])
-
-    def compute_nc_new(vectors):
-        m_all = torch.concat([torch.mean(vector, 0, keepdims=True).transpose(0,1) for vector in vectors.values()], 1)
-        B_2 = torch.cov(m_all, correction=0)
-        W_2 = torch.zeros(B_2.shape)
-        for v in vectors.values():
-            W_2 = W_2 + torch.cov(v.transpose(0,1), correction=0)
-        W_2 = W_2/len(vectors)
-        weights = torch.tensor([vector.shape[0] for vector in vectors.values()])
-
-    def nc_new1(vectors): 
-        m_all = torch.concat([torch.mean(vector, 0, keepdims=True).transpose(0,1) for vector in vectors.values()], 1)
-        B_2 = torch.cov(m_all, correction=0)
-        m_global = torch.mean(torch.concat([v for v in vectors.values()], 0), 0, keepdims=True).transpose(0,1)
-        B_1 = torch.mm(m_all - m_global, (m_all - m_global).transpose(0,1))/len(vectors)
-        weights = torch.tensor([vector.shape[0] for vector in vectors.values()])
-        W_2 = torch.zeros(B_2.shape)
-        W_1 = torch.zeros(B_2.shape)
-        for v in vectors.values():
-            W_2 = W_2 + torch.cov(v.transpose(0,1), correction=0)
-            W_1 = W_1 + torch.cov(v.transpose(0,1), correction=0)*v.shape[0]
-        W_2 = W_2/len(vectors)
-        W_1 = W_1/torch.sum(weights)
-        B_3 = torch.cov(m_all, correction=0, fweights = weights)
-        B_tmp3 = torch.zeros(B_2.shape)
-        B_tmp4 = torch.zeros(B_2.shape)
-        for i in range(len(vectors)):
-            B_tmp4 = B_tmp4 + torch.mm((m_all[:,i].reshape(-1,1) - m_global), (m_all[:,i].reshape(-1,1) - m_global).transpose(0,1))
-        B_tmp4 = B_tmp4/len(vectors)
-        nc_balanced = 1/len(vectors)*torch.trace(torch.matmul(W_1, torch.linalg.pinv(B_1)))
-        nc_imbalanced = 1/len(vectors)*torch.trace(torch.matmul(W_2, torch.linalg.pinv(B_2)))
-        nc_3 = 1/len(vectors)*torch.trace(torch.matmul(W_1, torch.linalg.pinv(B_2)))
-        nc_4 = 1/len(vectors)*torch.trace(torch.matmul(W_1, torch.linalg.pinv(B_3))) # paper version
-        nc_5 = 1/len(vectors)*torch.trace(torch.matmul(W_2, torch.linalg.pinv(B_1)))
-        nc_6 = 1/len(vectors)*torch.trace(torch.matmul(W_2, torch.linalg.pinv(B_3)))
-        nc_7 = 1/len(vectors)*torch.trace(torch.matmul(W_1, torch.linalg.pinv(B_tmp4)))
-        nc_8 = 1/len(vectors)*torch.trace(torch.matmul(W_2, torch.linalg.pinv(B_tmp4)))
-
-        #old_nc == nc_4
-        return([nc_balanced,nc_imbalanced, nc_3, nc_4, nc_5, nc_6, nc_7, nc_8])
-
-
-
-    nc=nc_new1(vector_category)
-    #logger.info(f'layer={args.num_hidden_layers}-token={args.chosen_token}-nc={compute_nc(vector_category)}')
-    logger.info(f'layer={args.num_hidden_layers}-token={args.chosen_token}-nc_donoho={nc[0]}-nc_imbalanced={nc[1]}-nc_3={nc[2]}-nc_4={nc[3]}-nc_5={nc[4]}-nc_6={nc[5]}-nc_7={nc[6]}-nc_8={nc[7]}')
-    with open(os.path.join(args.output_dir, "nc_results.json"), "w") as f:
-        json.dump({"nc_donoho": nc[0].item(), "nc_imbalanced": nc[1].item(), "nc_3": nc[2].item(), "nc_4": nc[3].item(), "nc_5": nc[4].item(), "nc_6": nc[5].item(), "nc_7": nc[6].item(), "nc_8": nc[7].item()}, f)
-        '''
-        json.dump({"nc_donoho": nc[0].item()}, f)
-        json.dump({"nc_imbalanced": nc[1].item()}, f)
-        json.dump({"nc_3": nc[2].item()}, f)
-        json.dump({"nc_4": nc[3].item()}, f)
-        json.dump({"nc_5": nc[4].item()}, f)
-        json.dump({"nc_6": nc[5].item()}, f)
-        json.dump({"nc_7": nc[6].item()}, f)
-        json.dump({"nc_8": nc[7].item()}, f)
-        '''
-    if args.delete_hidden_output:
-        for k in dataloader_category:
-            os.remove(f'{args.output_dir}/category={k}_{args.num_hidden_layers}_{args.chosen_token}.pt')
-    '''
     nc=compute_nc(vector_category)
-    #logger.info(f'layer={args.num_hidden_layers}-token={args.chosen_token}-nc={compute_nc(vector_category)}')
     logger.info(f'layer={args.num_hidden_layers}-token={args.chosen_token}-nc={nc}')
     with open(os.path.join(args.output_dir, "nc_results.json"), "w") as f:
         json.dump({"nc": nc.item()}, f)
+    '''
+    nc=compare_nc(vector_category)
+    logger.info(f'layer={args.num_hidden_layers}-token={args.chosen_token}-nc_original={nc[0]}-nc_paper={nc[1]}-nc_3={nc[2]}-nc_4={nc[3]}-nc_5={nc[4]}-nc_6={nc[5]}-nc_7={nc[6]}-nc_8={nc[7]}')
+    with open(os.path.join(args.output_dir, "nc_results.json"), "w") as f:
+        json.dump({"nc_original": nc[0].item(), "nc_paper": nc[1].item(), "nc_3": nc[2].item(), "nc_4": nc[3].item(), "nc_5": nc[4].item(), "nc_6": nc[5].item(), "nc_7": nc[6].item(), "nc_8": nc[7].item()}, f)
+    '''
     if args.delete_hidden_output:
         for k in dataloader_category:
             os.remove(f'{args.output_dir}/category={k}_{args.num_hidden_layers}_{args.chosen_token}.pt')
-    '''
     
     return 0
-
-
-    for epoch in range(args.num_train_epochs):
-        model.train()
-        '''
-        if args.with_tracking:
-            total_loss = 0
-        '''
-        total_loss = 0
-        for step, batch in enumerate(train_dataloader):
-            # We need to skip steps until we reach the resumed step
-            if args.resume_from_checkpoint and epoch == 0 and step < resume_step:
-                continue
-            outputs = model(**batch)
-            loss = outputs.loss
-            # We keep track of the loss at each epoch
-            '''
-            if args.with_tracking:
-                total_loss += loss.detach().float()
-            '''
-            total_loss += loss.detach().float()
-            loss = loss / args.gradient_accumulation_steps
-            accelerator.backward(loss)
-            if step % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
-                optimizer.step()
-                lr_scheduler.step()
-                optimizer.zero_grad()
-                progress_bar.update(1)
-                completed_steps += 1
-
-            '''
-            if isinstance(checkpointing_steps, int):
-                if completed_steps % checkpointing_steps == 0:
-                    output_dir = f"step_{completed_steps}"
-                    if args.output_dir is not None:
-                        output_dir = os.path.join(args.output_dir, output_dir)
-                    accelerator.save_state(output_dir)
-            '''
-
-            if completed_steps >= args.max_train_steps:
-                break
-
-        model.eval()
-        for step, batch in enumerate(eval_dataloader):
-            outputs = model(**batch)
-            predictions = outputs.logits.argmax(dim=-1) if not is_regression else outputs.logits.squeeze()
-            metric.add_batch(
-                predictions=accelerator.gather(predictions),
-                references=accelerator.gather(batch["labels"]),
-            )
-
-        eval_metric = metric.compute()
-        #logger.info(f"epoch {epoch}: {eval_metric}")
-
-        #accelerator.save_state(os.path.join(args.output_dir, 'last_model'))
-        #print(eval_metric)
-        if eval_metric['accuracy'] > best_metric:
-            #accelerator.save_state(os.path.join(args.output_dir, 'best_model'))
-            best_metric = eval_metric['accuracy']
-            best_epoch = epoch
-        logger.info(f"epoch {epoch}: train_loss={total_loss}|best_epoch={best_epoch}|accuracy={eval_metric['accuracy']}")
-
-        if args.with_tracking:
-            accelerator.log(
-                {
-                    "accuracy" if args.task_name is not None else "glue": eval_metric,
-                    "train_loss": total_loss,
-                    "epoch": epoch,
-                    "step": completed_steps,
-                },
-            )
-
-        if args.push_to_hub and epoch < args.num_train_epochs - 1:
-            accelerator.wait_for_everyone()
-            unwrapped_model = accelerator.unwrap_model(model)
-            unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
-            if accelerator.is_main_process:
-                tokenizer.save_pretrained(args.output_dir)
-                repo.push_to_hub(
-                    commit_message=f"Training in progress epoch {epoch}", blocking=False, auto_lfs_prune=True
-                )
-
-        if args.checkpointing_steps == "epoch":
-            output_dir = f"epoch_{epoch}"
-            if args.output_dir is not None:
-                output_dir = os.path.join(args.output_dir, output_dir)
-                old_dir = os.path.join(args.output_dir, f"epoch_{epoch-1}")
-            accelerator.save_state(output_dir)
-            if epoch>=1:
-                shutil.rmtree(old_dir)
-
-    #temporarily not saving models
-    '''
-    if args.output_dir is not None:
-        accelerator.wait_for_everyone()
-        unwrapped_model = accelerator.unwrap_model(model)
-        unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
-        if accelerator.is_main_process:
-            tokenizer.save_pretrained(args.output_dir)
-            if args.push_to_hub:
-                repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
-    '''
-
-    if args.task_name == "mnli":
-        # Final evaluation on mismatched validation set
-        eval_dataset = processed_datasets["validation_mismatched"]
-        eval_dataloader = DataLoader(
-            eval_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size
-        )
-        eval_dataloader = accelerator.prepare(eval_dataloader)
-
-        model.eval()
-        for step, batch in enumerate(eval_dataloader):
-            outputs = model(**batch)
-            predictions = outputs.logits.argmax(dim=-1)
-            metric.add_batch(
-                predictions=accelerator.gather(predictions),
-                references=accelerator.gather(batch["labels"]),
-            )
-
-        eval_metric = metric.compute()
-        logger.info(f"mnli-mm: {eval_metric}")
-
-    if args.output_dir is not None:
-        with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
-            json.dump({"eval_accuracy": eval_metric["accuracy"]}, f)
 
 
 if __name__ == "__main__":

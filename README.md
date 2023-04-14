@@ -45,6 +45,3 @@ The code for the adapter-tuning method is borrowed from [this repo](https://gith
 bash scripts/finetune.sh
 bash scripts/ef_finetune.sh
 ```
-
-## License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

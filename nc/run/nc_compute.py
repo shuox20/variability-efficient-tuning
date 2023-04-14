@@ -159,10 +159,10 @@ def parse_args():
         help="Whether to load in all available experiment trackers from the environment and use them for logging.",
     )
     parser.add_argument(
-        "--num_hidden_layers",
+        "--last_layer",
         type=int,
         default=None, 
-        help="Change the number of hidden layers",
+        help="index of output layer",
     )
     parser.add_argument(
         "--chosen_token",
@@ -317,8 +317,8 @@ def main():
 
     config = AutoConfig.from_pretrained(args.model_name_or_path, num_labels=num_labels, finetuning_task=args.task_name, output_hidden_states=True, cache_dir="../cache/")
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_fast=not args.use_slow_tokenizer, cache_dir="../cache/")
-    if args.num_hidden_layers is not None:
-        config.num_hidden_layers=args.num_hidden_layers
+    if args.last_layer is not None:
+        config.num_hidden_layers=args.last_layer+1
     logger.info(config)
     model = AutoModelForSequenceClassification.from_pretrained(
         args.model_name_or_path,
@@ -469,15 +469,15 @@ def main():
     
     vector_category = {}
     for k,v in dataloader_category.items():
-        if os.path.exists(f'{args.output_dir}/category={k}_{args.num_hidden_layers}_{args.chosen_token}.pt'):
-            print(f'resume result in {k} from {args.output_dir}/category={k}_{args.num_hidden_layers}_{args.chosen_token}.pt')
-            logger.info(f'resume result in {k} from {args.output_dir}/category={k}_{args.num_hidden_layers}_{args.chosen_token}.pt')
-            vector_category[k]=torch.load(f'{args.output_dir}/category={k}_{args.num_hidden_layers}_{args.chosen_token}.pt', map_location=None)
+        if os.path.exists(f'{args.output_dir}/category={k}_{args.last_layer}_{args.chosen_token}.pt'):
+            print(f'resume result in {k} from {args.output_dir}/category={k}_{args.last_layer}_{args.chosen_token}.pt')
+            logger.info(f'resume result in {k} from {args.output_dir}/category={k}_{args.last_layer}_{args.chosen_token}.pt')
+            vector_category[k]=torch.load(f'{args.output_dir}/category={k}_{args.last_layer}_{args.chosen_token}.pt', map_location=None)
             continue
         i=0
         for batch in v:
             with torch.no_grad():
-                state = model(**batch).hidden_states[args.num_hidden_layers]
+                state = model(**batch).hidden_states[args.last_layer+1]
             input_ids = batch['input_ids']
             
             if args.chosen_token=='BOS':
@@ -500,22 +500,16 @@ def main():
             del input_ids
             torch.cuda.empty_cache()
         if args.save_hidden_output:
-            torch.save(vector_category[k], f'{args.output_dir}/category={k}_{args.num_hidden_layers}_{args.chosen_token}.pt')
+            torch.save(vector_category[k], f'{args.output_dir}/category={k}_{args.last_layer}_{args.chosen_token}.pt')
             logger.info(f'save vectors in category {k}')
 
     nc=compute_nc(vector_category)
-    logger.info(f'layer={args.num_hidden_layers}-token={args.chosen_token}-nc={nc}')
+    logger.info(f'layer={args.last_layer}-token={args.chosen_token}-nc={nc}')
     with open(os.path.join(args.output_dir, "nc_results.json"), "w") as f:
         json.dump({"nc": nc.item()}, f)
-    '''
-    nc=compare_nc(vector_category)
-    logger.info(f'layer={args.num_hidden_layers}-token={args.chosen_token}-nc_original={nc[0]}-nc_paper={nc[1]}-nc_3={nc[2]}-nc_4={nc[3]}-nc_5={nc[4]}-nc_6={nc[5]}-nc_7={nc[6]}-nc_8={nc[7]}')
-    with open(os.path.join(args.output_dir, "nc_results.json"), "w") as f:
-        json.dump({"nc_original": nc[0].item(), "nc_paper": nc[1].item(), "nc_3": nc[2].item(), "nc_4": nc[3].item(), "nc_5": nc[4].item(), "nc_6": nc[5].item(), "nc_7": nc[6].item(), "nc_8": nc[7].item()}, f)
-    '''
     if args.delete_hidden_output:
         for k in dataloader_category:
-            os.remove(f'{args.output_dir}/category={k}_{args.num_hidden_layers}_{args.chosen_token}.pt')
+            os.remove(f'{args.output_dir}/category={k}_{args.last_layer}_{args.chosen_token}.pt')
     
     return 0
 

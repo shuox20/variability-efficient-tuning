@@ -55,7 +55,7 @@ from torch import nn
 #from transformers.models.roberta.modeling_roberta import RobertaClassificationHead
 #from transformers.modeling_outputs import SequenceClassifierOutput
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from ...models.modeling_roberta import RobertaForSequenceClassification as RobertaForSequenceClassification_adapter
+from nc.models.modeling_roberta import RobertaForSequenceClassification as RobertaForSequenceClassification_adapter
 
 logger = logging.getLogger(__name__)
 

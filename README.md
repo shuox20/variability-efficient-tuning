@@ -8,7 +8,6 @@ If you use this code as part of any published research, please acknowledge the f
 ```
 @inproceedings{xie2022nc,
   abbr = {EMNLP},
-  bibtex_show = {true},
   author = {Xie, Shuo and Qiu, Jiahao and Pasad, Ankita and Du, Li and Qu, Qing and Mei, Hongyuan},
   title = {Hidden State Variability of Pretrained Language Models Can Guide Computation Reduction for Transfer Learning},
   booktitle = {Findings of EMNLP},

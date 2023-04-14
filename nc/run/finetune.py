@@ -1,35 +1,3 @@
-Skip to content
-Search or jump to…
-Pull requests
-Issues
-Codespaces
-Marketplace
-Explore
- 
-@shuox20 
-shuox20
-/
-nc
-Private
-Cannot fork because you own this repository and are not a member of any organizations.
-Code
-Issues
-Pull requests
-Actions
-Projects
-Wiki
-Security
-Insights
-Settings
-nc/finetune.py /
-@shuox20
-shuox20 Update new scripts
-Latest commit ab0de09 on Aug 23, 2022
- History
- 1 contributor
-821 lines (751 sloc)  35.4 KB
- 
-
 # coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
@@ -221,6 +189,12 @@ def parse_args():
         help="the last hidden layer to be finetuned",
     )
     parser.add_argument(
+        "--head_layer",
+        type=int,
+        default=None,
+        help="the layer to attach head classifier",
+    )
+    parser.add_argument(
         "--chosen_token",
         type=str,
         default='AVG',
@@ -228,7 +202,7 @@ def parse_args():
     )
     parser.add_argument(
         "--save_best",
-        action="store_false",
+        action="store_true",
     )
     parser.add_argument(
         "--save_last",
@@ -444,15 +418,11 @@ def main():
     config = AutoConfig.from_pretrained(args.model_name_or_path, num_labels=num_labels, finetuning_task=args.task_name, output_hidden_states=True, cache_dir="../cache/")
     #tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_fast=not args.use_slow_tokenizer)
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_fast=not args.use_slow_tokenizer, cache_dir="../cache/")
-    if args.last_finetune_layer is not None:
-        config.num_hidden_layers=args.last_finetune_layer+1
+    original_depth=config.num_hidden_layers
+    if args.head_layer is not None:
+        config.num_hidden_layers=args.head_layer+1
+    #config.chosen_token=args.chosen_token
     logger.info(config)
-    '''
-    model = AutoModelForSequenceClassification.from_pretrained(
-        args.model_name_or_path,
-        from_tf=bool(".ckpt" in args.model_name_or_path),
-        config=config,
-    '''
     model = AutoModelForSequenceClassification.from_pretrained(
         args.model_name_or_path,
         from_tf=bool(".ckpt" in args.model_name_or_path),
@@ -628,7 +598,7 @@ def main():
 
     # Get the metric function
     if args.task_name is not None:
-        metric = load_metric("glue", args.task_name)
+        metric = load_metric("glue", args.task_name, cache_dir='../cache')
     else:
         metric = load_metric("accuracy")
 
@@ -639,15 +609,32 @@ def main():
         p.requires_grad = False
     for i in range(args.last_finetune_layer- args.num_finetune_layers+1, args.last_finetune_layer+1):
         logger.info(f'finetune layer {i}')
-        print(f'finetune layer {i}')
+        #print(f'finetune layer {i}')
         for p in model.roberta.encoder.layer[i].parameters():
             p.requires_grad = True
+    if args.num_finetune_layers==original_depth and args.head_layer+1==original_depth:
+        for p in model.roberta.embeddings.parameters():
+            p.requires_grad = True
+            logger.info(f'finetune embedding')
+            #print(f'finetune embedding')
     for p in classifier_head.parameters():
         p.requires_grad = True
     
     for n,p in model.named_parameters():
-        print(f"{n}: {p.requires_grad}")
+        #print(f"{n}: {p.requires_grad}")
         logger.info(f"{n}: {p.requires_grad}")
+
+    n_parameters = sum(p.numel() for p in model.parameters())
+    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad) + sum(p.numel() for p in classifier_head.parameters() if p.requires_grad)
+    '''
+    print(f"number of parameters : {n_parameters}")
+    print(f"number of trainable parameters : {trainable}")
+    print(f"ratio of trainable parameters : {trainable/n_parameters}")
+    '''
+    logger.info(f"number of parameters : {n_parameters}")
+    logger.info(f"number of trainable parameters : {trainable}")
+    logger.info(f"ratio of trainable parameters : {trainable/n_parameters}")
+
     logger.info("***** Running training *****")
     logger.info(f"  Num examples = {len(train_dataset)}")
     logger.info(f"  Num Epochs = {args.num_train_epochs}")
@@ -797,12 +784,15 @@ def main():
             if args.output_dir is not None:
                 output_dir = os.path.join(args.output_dir, output_dir)
                 old_dir = os.path.join(args.output_dir, f"epoch_{epoch-1}")
-            if epoch < args.num_train_epochs-1:
+            if epoch < args.num_train_epochs-1 or epoch < 19:
                 accelerator.save_state(output_dir)
+            '''
             if epoch == args.num_train_epochs-1 and args.save_last:
                 accelerator.save_state(output_dir)
+            '''
             #if epoch>=1:
-            if epoch>=1 and args.task_name not in ['mnli','qqp']:
+            #if epoch>=1 and args.task_name not in ['mnli','qqp']:
+            if epoch>=1: 
                 shutil.rmtree(old_dir)
 
     #temporarily not saving models

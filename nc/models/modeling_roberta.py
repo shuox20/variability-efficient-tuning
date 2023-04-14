@@ -47,7 +47,7 @@ from transformers.utils import (
 from transformers.models.roberta.configuration_roberta import RobertaConfig
 
 #new
-from petl.petl_factory import Adapter_Layer, softmax_gating, Linear
+from nc.models.petl.petl_factory import Adapter_Layer, softmax_gating, Linear
 import copy
 
 logger = logging.get_logger(__name__)
